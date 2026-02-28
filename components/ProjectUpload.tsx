@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { Upload, X, FileSpreadsheet, AlertCircle, CheckCircle } from 'lucide-react'
-import { projectStorageService } from '@/lib/projectStorage'
 
 interface ProjectUploadProps {
   onClose: () => void
@@ -73,9 +72,7 @@ export default function ProjectUpload({ onClose, onUploadSuccess }: ProjectUploa
         throw new Error(result.error || 'Upload failed')
       }
 
-      // Save to localStorage
-      projectStorageService.saveProjects(result.data)
-
+      // Data is saved to database via API
       setSuccess(`Successfully uploaded ${result.recordCount} projects!`)
       setTimeout(() => {
         onUploadSuccess()

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import ConfirmDialog from './ConfirmDialog'
 import { Upload, Calendar, TrendingUp, Users, Clock } from 'lucide-react'
 import UtilizationTable from './UtilizationTable'
 import UtilizationCharts from './UtilizationCharts'
@@ -11,11 +12,56 @@ import { storageService } from '@/lib/storage'
 import type { EmployeeUtilization } from '@/types/utilization'
 
 type ViewType = 'weekly' | 'monthly' | 'quarterly' | 'annual'
+type PeriodType = 'lastMonth' | 'last6Months' | 'Q1' | 'Q2' | 'Q3' | 'Q4' | 'annual' | 'custom'
+
+// Compute actual from/to date strings for a chosen period
+function getDateRange(period: PeriodType, month: number, year: number): { from: string; to: string } | null {
+  const today = new Date()
+  const cm = today.getMonth() + 1
+  const cy = today.getFullYear()
+  // Financial year start year (Apr–Mar)
+  const fyStart = cm >= 4 ? cy : cy - 1
+
+  const fmt = (y: number, m: number, d: number) =>
+    `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+  const lastDay = (y: number, m: number) => new Date(y, m, 0).getDate()
+
+  if (period === 'lastMonth') {
+    const lm = cm === 1 ? 12 : cm - 1
+    const ly = cm === 1 ? cy - 1 : cy
+    return { from: fmt(ly, lm, 1), to: fmt(ly, lm, lastDay(ly, lm)) }
+  }
+  if (period === 'last6Months') {
+    const d = new Date(cy, today.getMonth() - 5, 1)
+    return { from: fmt(d.getFullYear(), d.getMonth() + 1, 1), to: fmt(cy, cm, lastDay(cy, cm)) }
+  }
+  if (period === 'Q1') return { from: fmt(fyStart, 4, 1),      to: fmt(fyStart, 6, 30) }
+  if (period === 'Q2') return { from: fmt(fyStart, 7, 1),      to: fmt(fyStart, 9, 30) }
+  if (period === 'Q3') return { from: fmt(fyStart, 10, 1),     to: fmt(fyStart, 12, 31) }
+  if (period === 'Q4') return { from: fmt(fyStart + 1, 1, 1),  to: fmt(fyStart + 1, 3, 31) }
+  if (period === 'annual') return { from: fmt(fyStart, 4, 1),  to: fmt(fyStart + 1, 3, 31) }
+  if (period === 'custom') {
+    return { from: fmt(year, month, 1), to: fmt(year, month, lastDay(year, month)) }
+  }
+  return null
+}
 
 export default function Dashboard() {
   const [currentView, setCurrentView] = useState<ViewType>('weekly')
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('lastMonth')
+  // Initialize to last month
+  const initLastMonth = () => {
+    const now = new Date()
+    return now.getMonth() === 0
+      ? { month: 12, year: now.getFullYear() - 1 }
+      : { month: now.getMonth(), year: now.getFullYear() }
+  }
+  const lm = initLastMonth()
+  const [customMonth, setCustomMonth] = useState<number>(lm.month)
+  const [customYear, setCustomYear] = useState<number>(lm.year)
   const [showUpload, setShowUpload] = useState(false)
-  const [data, setData] = useState<EmployeeUtilization[]>([])
+  const [showConfirm, setShowConfirm] = useState(false)
+  const [data, setData] = useState<EmployeeUtilization[]>([])  
   const [loading, setLoading] = useState(true)
   const [selectedRange, setSelectedRange] = useState<{min: number, max: number, label: string} | null>(null)
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
@@ -27,9 +73,9 @@ export default function Dashboard() {
   })
   const tableRef = useRef<HTMLDivElement>(null)
 
-  // Load data from localStorage on mount
+  // Initial load with lastMonth
   useEffect(() => {
-    loadData()
+    loadData('lastMonth', lm.month, lm.year)
   }, [])
 
   // Auto-scroll to table when range is selected
@@ -39,38 +85,84 @@ export default function Dashboard() {
     }
   }, [selectedRange])
 
-  const loadData = () => {
+  const loadData = async (period?: PeriodType, month?: number, year?: number) => {
     setLoading(true)
-    // Simulate async loading for smooth transition
-    setTimeout(() => {
-      const storedData = storageService.getData()
-      const metadata = storageService.getMetadata()
-      
-      setData(storedData)
-      setSummary(storageService.getSummary(storedData))
-      setLastUpdated(metadata?.lastUpdated || null)
-      setLoading(false)
-      
-      if (metadata) {
-        console.log('📊 Data Info:', {
-          records: storedData.length,
-          lastUpdated: new Date(metadata.lastUpdated).toLocaleString(),
-          fileName: metadata.fileName,
-          fileType: metadata.fileType
-        })
+    try {
+      const activePeriod = period ?? selectedPeriod
+      const activeMonth  = month  ?? customMonth
+      const activeYear   = year   ?? customYear
+
+      const url = new URL('/api/data', window.location.origin)
+      const range = getDateRange(activePeriod, activeMonth, activeYear)
+      if (range) {
+        url.searchParams.set('fromDate', range.from)
+        url.searchParams.set('toDate', range.to)
       }
-    }, 200)
+
+      const response = await fetch(url.toString())
+      const result = await response.json()
+      
+      if (result.success && result.data) {
+        const transformedData: EmployeeUtilization[] = result.data.map((record: any) => ({
+          id: record.id,
+          name: record.name,
+          title: record.title,
+          targetHours: record.targetHours,
+          project: record.project,
+          pmn: record.pmn,
+          utilization: record.utilization,
+          fringeImpact: record.fringeImpact,
+          fringe: record.fringe,
+          wPresales: record.wPresales,
+          mentor: record.mentor || '',
+          fromDate: record.fromDate,
+          toDate: record.toDate,
+          periodType: record.periodType,
+        }))
+        setData(transformedData)
+        setSummary(storageService.getSummary(transformedData))
+        setLastUpdated(result.metadata?.lastUpdated || null)
+      } else {
+        setData([])
+        setSummary({ totalEmployees: 0, avgUtilization: 0, totalHours: 0, targetHours: 0 })
+        setLastUpdated(null)
+      }
+    } catch (error) {
+      console.error('Failed to load data:', error)
+      setData([])
+      setSummary({ totalEmployees: 0, avgUtilization: 0, totalHours: 0, targetHours: 0 })
+      setLastUpdated(null)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleUploadSuccess = () => {
-    loadData()
+    loadData(selectedPeriod, customMonth, customYear)
   }
 
-  const handleClearData = () => {
-    if (confirm('Are you sure you want to clear all data?')) {
-      storageService.clearData()
-      loadData()
+  const handleClearData = async () => {
+    try {
+      const response = await fetch('/api/data', { method: 'DELETE' })
+      const result = await response.json()
+      if (result.success) {
+        loadData(selectedPeriod, customMonth, customYear)
+      } else {
+        alert('Failed to clear data: ' + result.error)
+      }
+    } catch (error) {
+      alert('Failed to clear data. Please try again.')
     }
+  }
+
+  const handlePeriodSelect = (p: PeriodType) => {
+    setSelectedPeriod(p)
+    loadData(p, customMonth, customYear)
+  }
+
+  const handleGetResults = () => {
+    setSelectedPeriod('custom')
+    loadData('custom', customMonth, customYear)
   }
 
   const handleRangeSelect = (min: number, max: number, label: string) => {
@@ -84,6 +176,28 @@ export default function Dashboard() {
   const filteredData = selectedRange
     ? data.filter(emp => emp.utilization >= selectedRange.min && emp.utilization < selectedRange.max)
     : data
+
+  const periodOptions: { value: PeriodType; label: string }[] = [
+    { value: 'lastMonth',   label: 'Last Month' },
+    { value: 'last6Months', label: 'Last 6 Months' },
+    { value: 'Q1',          label: 'Q1' },
+    { value: 'Q2',          label: 'Q2' },
+    { value: 'Q3',          label: 'Q3' },
+    { value: 'Q4',          label: 'Q4' },
+    { value: 'annual',      label: 'Annual' },
+  ]
+
+  const getPeriodLabel = () => {
+    if (selectedPeriod === 'custom') {
+      const monthNames = ['January','February','March','April','May','June',
+                          'July','August','September','October','November','December']
+      return `${monthNames[customMonth - 1]} ${customYear}`
+    }
+    const range = getDateRange(selectedPeriod, customMonth, customYear)
+    const base = periodOptions.find(p => p.value === selectedPeriod)?.label || ''
+    if (!range) return base
+    return `${base} (${range.from} – ${range.to})`
+  }
 
   const views: { value: ViewType; label: string }[] = [
     { value: 'weekly', label: 'Weekly' },
@@ -129,6 +243,16 @@ export default function Dashboard() {
 
   return (
     <div className="h-full flex flex-col">
+      <ConfirmDialog
+        open={showConfirm}
+        title="Clear Data"
+        message="Are you sure you want to clear all data from the database? This action cannot be undone."
+        onConfirm={() => {
+          setShowConfirm(false)
+          handleClearData()
+        }}
+        onCancel={() => setShowConfirm(false)}
+      />
       {/* Header */}
       <header className="bg-surface border-b border-surface-light px-8 py-6">
         <div className="mb-2">
@@ -141,7 +265,7 @@ export default function Dashboard() {
               Track and analyze employee billable hours
               {data.length > 0 && (
                 <span className="ml-2 text-text-muted">
-                  • {data.length} employees loaded
+                  • {data.length} employees
                 </span>
               )}
             </p>
@@ -149,7 +273,7 @@ export default function Dashboard() {
           <div className="flex items-center space-x-3">
             {data.length > 0 && (
               <button
-                onClick={handleClearData}
+                onClick={() => setShowConfirm(true)}
                 className="flex items-center space-x-2 px-4 py-2.5 bg-surface-light hover:bg-opacity-80 text-text-secondary hover:text-text-primary rounded-lg transition-colors"
               >
                 <span className="font-medium">Clear Data</span>
@@ -165,7 +289,66 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* View Selector */}
+        {/* Period Filter Row */}
+        <div className="mt-5">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            {/* Period preset buttons */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {periodOptions.map((p) => (
+                <button
+                  key={p.value}
+                  onClick={() => handlePeriodSelect(p.value)}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all text-sm ${
+                    selectedPeriod === p.value
+                      ? 'bg-primary text-white shadow-lg shadow-primary/30'
+                      : 'bg-surface-light text-text-secondary hover:text-text-primary hover:bg-opacity-80'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Custom month/year picker */}
+            <div className="flex items-center gap-2 bg-surface-light px-3 py-2 rounded-lg border border-surface-light">
+              <Calendar className="w-4 h-4 text-text-muted" />
+              <select
+                value={customMonth}
+                onChange={(e) => setCustomMonth(Number(e.target.value))}
+                className="bg-transparent text-text-primary text-sm font-medium border-none outline-none cursor-pointer pr-2"
+              >
+                {['January','February','March','April','May','June',
+                  'July','August','September','October','November','December'].map((name, i) => (
+                  <option key={i + 1} value={i + 1}>{name}</option>
+                ))}
+              </select>
+              <span className="text-text-muted">|</span>
+              <select
+                value={customYear}
+                onChange={(e) => setCustomYear(Number(e.target.value))}
+                className="bg-transparent text-text-primary text-sm font-medium border-none outline-none cursor-pointer pr-2"
+              >
+                {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+              <button
+                onClick={handleGetResults}
+                className="ml-2 px-3 py-1.5 bg-primary text-white text-sm font-medium rounded-md hover:bg-primary-dark transition-colors"
+              >
+                Get Results
+              </button>
+            </div>
+          </div>
+
+          {/* What is being shown */}
+          <div className="mt-3 text-sm text-text-muted">
+            Showing data for: <span className="font-semibold text-text-primary">{getPeriodLabel()}</span>
+            {data.length === 0 && !loading && (
+              <span className="ml-3 text-warning font-medium">No data found for this period</span>
+            )}
+          </div>
+        </div>
         <div className="flex items-center space-x-2 mt-6">
           {views.map((view) => (
             <button
@@ -215,13 +398,28 @@ export default function Dashboard() {
           })}
         </div>
 
-        {/* Charts */}
-        <UtilizationCharts 
-          viewType={currentView} 
-          data={data}
-          onRangeSelect={handleRangeSelect}
-          selectedRange={selectedRange}
-        />
+        {/* No data message */}
+        {data.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="w-16 h-16 bg-surface-light rounded-full flex items-center justify-center mb-4">
+              <Calendar className="w-8 h-8 text-text-muted" />
+            </div>
+            <h3 className="text-lg font-semibold text-text-primary mb-2">No sufficient data</h3>
+            <p className="text-text-secondary text-sm max-w-sm">
+              There is no utilization data for <strong>{getPeriodLabel()}</strong>. Try a different period or upload data.
+            </p>
+          </div>
+        )}
+
+        {/* Charts — only show when there is data */}
+        {data.length > 0 && (
+          <UtilizationCharts 
+            viewType={currentView} 
+            data={data}
+            onRangeSelect={handleRangeSelect}
+            selectedRange={selectedRange}
+          />
+        )}
 
         {/* Data Table */}
         <div ref={tableRef}>
@@ -229,7 +427,7 @@ export default function Dashboard() {
             <div className="bg-primary/10 border border-primary/30 rounded-lg p-3 flex items-center justify-between mb-6">
               <div className="flex items-center space-x-2">
                 <span className="text-text-primary font-medium">Filtered by:</span>
-                <span className="text-primary font-semibold">{selectedRange.label}</span>
+                <span className="text-primary font-semibold">{selectedRange?.label}</span>
                 <span className="text-text-secondary">({filteredData.length} employees)</span>
               </div>
               <button

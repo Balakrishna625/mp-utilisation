@@ -76,8 +76,6 @@ export async function POST(request: NextRequest) {
         blankrows: false
       })
 
-      console.log('Raw project data sample:', rawData[0])
-
       // Transform data
       const transformedData = rawData
         .map((row: any, index: number) => {
@@ -93,6 +91,20 @@ export async function POST(request: NextRequest) {
           
           // Skip empty rows
           if (!projectName || projectName.trim() === '') {
+            return null
+          }
+          
+          // Skip metadata/filter rows
+          const nameStr = String(projectName).toLowerCase().trim()
+          const invalidPatterns = [
+            'applied filters', 'total', 'sum', 'included', 'excluded',
+            'fiscalyear', 'fiscalquarter', 'fiscalmonth', 'globalworkgroup',
+            'department code', 'current-former employee', 'supervisor',
+            'begintimesdates', 'endtimesdates', 'exemptfromcptimeentry',
+            'estimatedtargethours'
+          ]
+          
+          if (invalidPatterns.some(pattern => nameStr.includes(pattern))) {
             return null
           }
 
@@ -135,13 +147,49 @@ export async function POST(request: NextRequest) {
       }
 
       console.log('Transformed projects count:', transformedData.length)
-      console.log('Sample transformed project:', transformedData[0])
+
+      // Save to database
+      const prisma = (await import('@/lib/prisma')).default
+      
+      // Clear existing projects
+      await prisma.mPProject.deleteMany({})
+
+      // Create new projects
+      const created = await prisma.mPProject.createMany({
+        data: transformedData.map((proj: any) => ({
+          projectName: proj.projectName,
+          status: proj.status,
+          projectType: proj.projectType,
+          region: proj.region,
+          deliveryPOC: proj.deliveryPOC,
+          deliveryOwner: proj.deliveryOwner,
+          fmRCNames: proj.fmRCNames,
+          remarks: proj.remarks,
+          accountManager: proj.accountManager,
+          duration: proj.duration,
+          startDate: proj.startDate ? new Date(proj.startDate) : new Date(),
+          endDate: proj.endDate ? new Date(proj.endDate) : new Date(),
+          techstack: proj.techstack,
+          salesFolder: proj.salesFolder || '',
+          practice: proj.practice,
+          projectTerritory: proj.projectTerritory
+        }))
+      })
+
+      // Save upload metadata
+      await prisma.uploadMetadata.create({
+        data: {
+          dataType: 'projects',
+          fileName: file.name,
+          recordCount: created.count
+        }
+      })
 
       return NextResponse.json({
         success: true,
-        message: `Successfully uploaded ${transformedData.length} projects from ${file.name}`,
+        message: `Successfully uploaded ${created.count} projects from ${file.name}`,
         data: transformedData,
-        recordCount: transformedData.length,
+        recordCount: created.count,
         fileName: file.name,
       })
     } catch (parseError: any) {

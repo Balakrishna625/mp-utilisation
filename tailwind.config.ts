@@ -1,6 +1,7 @@
 import type { Config } from 'tailwindcss'
 
 const config: Config = {
+  darkMode: 'class',
   content: [
     './pages/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
@@ -9,19 +10,33 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        background: '#0a0e1a',
-        surface: '#141824',
-        'surface-light': '#1e2433',
-        primary: '#3b82f6',
-        'primary-dark': '#2563eb',
-        secondary: '#8b5cf6',
-        accent: '#06b6d4',
+        background: 'var(--background)',
+        surface: 'var(--surface)',
+        'surface-light': 'var(--surface-light)',
+        primary: '#0052CC',
+        'primary-dark': '#003D99',
+        secondary: '#00CED1',
+        accent: '#FF6B35',
         success: '#10b981',
         warning: '#f59e0b',
         danger: '#ef4444',
-        'text-primary': '#f1f5f9',
-        'text-secondary': '#94a3b8',
-        'text-muted': '#64748b',
+        'text-primary': 'var(--text-primary)',
+        'text-secondary': 'var(--text-secondary)',
+        'text-muted': 'var(--text-muted)',
+      },
+      keyframes: {
+        shimmer: {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(100%)' },
+        },
+        'bounce-slow': {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%': { transform: 'translateY(-10px)' },
+        },
+      },
+      animation: {
+        shimmer: 'shimmer 2s infinite',
+        'bounce-slow': 'bounce-slow 2s infinite',
       },
     },
   },

@@ -1,4 +1,4 @@
-export type AvailabilityStatus = 'Available' | 'No' | 'Has Bandwidth' | 'Booked'
+export type AvailabilityStatus = 'Available' | 'No' | 'Has Bandwidth' | 'Booked' | 'Partial'
 
 export interface EmployeeReport {
   id: string

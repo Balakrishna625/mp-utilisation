@@ -1,8 +1,7 @@
-'use client'
-
+"use client"
+import ConfirmDialog from '@/components/ConfirmDialog'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { Upload, Trash2, Search, Users, UserCheck, UserX, Clock, Briefcase, X } from 'lucide-react'
-import { reportStorageService } from '@/lib/reportStorage'
 import ReportUpload from '@/components/ReportUpload'
 import LastUpdated from '@/components/LastUpdated'
 import LoadingSkeleton from '@/components/LoadingSkeleton'
@@ -11,6 +10,7 @@ import type { EmployeeReport, AvailabilityStatus } from '@/types/report'
 type FilterType = 'all' | 'available' | 'no' | 'has-bandwidth' | 'booked'
 
 export default function ReportsPage() {
+    const [showConfirm, setShowConfirm] = useState(false)
   const [reports, setReports] = useState<EmployeeReport[]>([])
   const [loading, setLoading] = useState(true)
   const [showUpload, setShowUpload] = useState(false)
@@ -23,25 +23,47 @@ export default function ReportsPage() {
     loadReports()
   }, [])
 
-  const loadReports = () => {
+  const loadReports = async () => {
     setLoading(true)
-    setTimeout(() => {
-      const data = reportStorageService.getReports()
-      const metadata = reportStorageService.getMetadata()
-      setReports(data)
-      setLastUpdated(metadata?.lastUpdated || null)
+    try {
+      // Fetch reports from database
+      const response = await fetch('/api/reports')
+      const result = await response.json()
+      
+      if (result.success && result.data) {
+        setReports(result.data)
+        setLastUpdated(result.metadata?.lastUpdated || null)
+        console.log('📊 Loaded', result.data.length, 'reports from database')
+      } else {
+        setReports([])
+        setLastUpdated(null)
+      }
+    } catch (error) {
+      console.error('Failed to load reports:', error)
+      setReports([])
+      setLastUpdated(null)
+    } finally {
       setLoading(false)
-    }, 200)
+    }
   }
 
-  const handleUploadSuccess = () => {
+  const handleUploadSuccess = (_count?: number) => {
     loadReports()
   }
 
-  const handleClearData = () => {
-    if (confirm('Are you sure you want to clear all report data?')) {
-      reportStorageService.clearReports()
-      loadReports()
+  const handleClearData = async () => {
+    try {
+      const response = await fetch('/api/reports', { method: 'DELETE' })
+      const result = await response.json()
+      if (result.success) {
+        console.log('✅ Cleared reports:', result.message)
+        loadReports()
+      } else {
+        alert('Failed to clear reports')
+      }
+    } catch (error) {
+      console.error('Failed to clear reports:', error)
+      alert('Failed to clear reports. Please try again.')
     }
   }
 
@@ -136,6 +158,16 @@ export default function ReportsPage() {
 
   return (
     <div className="min-h-screen bg-background">
+      <ConfirmDialog
+        open={showConfirm}
+        title="Clear Report Data"
+        message="Are you sure you want to clear all report data from the database? This action cannot be undone."
+        onConfirm={() => {
+          setShowConfirm(false)
+          handleClearData()
+        }}
+        onCancel={() => setShowConfirm(false)}
+      />
       <div className="h-full">
         {/* Header */}
         <div className="px-8 pt-6 pb-2">
@@ -155,7 +187,7 @@ export default function ReportsPage() {
               <span className="font-medium">Upload Report</span>
             </button>
             <button
-              onClick={handleClearData}
+              onClick={() => setShowConfirm(true)}
               className="flex items-center space-x-2 px-4 py-2 bg-danger hover:bg-danger/90 text-white rounded-lg transition-colors"
             >
               <Trash2 className="w-5 h-5" />
@@ -308,7 +340,7 @@ export default function ReportsPage() {
                     <td className="py-3 px-4">
                       <div>
                         <p className="text-text-primary text-sm font-medium">{report.currentProject}</p>
-                        {report.currentProjectUtilization > 0 && (
+                        {(report.currentProjectUtilization ?? 0) > 0 && (
                           <p className="text-text-muted text-xs">{report.currentProjectUtilization}% utilized</p>
                         )}
                       </div>

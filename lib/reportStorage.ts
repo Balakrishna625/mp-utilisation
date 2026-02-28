@@ -1,65 +1,24 @@
 import type { EmployeeReport } from '@/types/report'
 
-const REPORT_STORAGE_KEY = 'mp-reports-data'
-const REPORT_METADATA_KEY = 'mp-reports-metadata'
-
-interface ReportMetadata {
-  lastUpdated: string
-  recordCount: number
-  fileName?: string
-}
+// NOTE: This service no longer uses localStorage - all data should come from database
+// Keeping this for backward compatibility
 
 export const reportStorageService = {
   saveReports: (reports: EmployeeReport[], fileName?: string) => {
-    if (typeof window === 'undefined') return
-    
-    try {
-      localStorage.setItem(REPORT_STORAGE_KEY, JSON.stringify(reports))
-      const metadata: ReportMetadata = {
-        lastUpdated: new Date().toISOString(),
-        recordCount: reports.length,
-        fileName,
-      }
-      localStorage.setItem(REPORT_METADATA_KEY, JSON.stringify(metadata))
-      console.log('✅ Saved', reports.length, 'reports to localStorage')
-    } catch (error) {
-      console.error('Error saving reports:', error)
-    }
+    console.log('⚠️ reportStorageService.saveReports called but localStorage is disabled. Use API endpoints instead.')
   },
 
   getReports: (): EmployeeReport[] => {
-    if (typeof window === 'undefined') return []
-    
-    try {
-      const data = localStorage.getItem(REPORT_STORAGE_KEY)
-      return data ? JSON.parse(data) : []
-    } catch (error) {
-      console.error('Error loading reports:', error)
-      return []
-    }
+    console.log('⚠️ reportStorageService.getReports called but localStorage is disabled. Use /api/reports instead.')
+    return []
   },
 
-  getMetadata: (): ReportMetadata | null => {
-    if (typeof window === 'undefined') return null
-    
-    try {
-      const metadata = localStorage.getItem(REPORT_METADATA_KEY)
-      return metadata ? JSON.parse(metadata) : null
-    } catch (error) {
-      console.error('Error loading report metadata:', error)
-      return null
-    }
+  getMetadata: (): null => {
+    console.log('⚠️ reportStorageService.getMetadata called but localStorage is disabled.')
+    return null
   },
 
   clearReports: () => {
-    if (typeof window === 'undefined') return
-    
-    try {
-      localStorage.removeItem(REPORT_STORAGE_KEY)
-      localStorage.removeItem(REPORT_METADATA_KEY)
-      console.log('🗑️ Cleared reports data')
-    } catch (error) {
-      console.error('Error clearing reports:', error)
-    }
+    console.log('⚠️ reportStorageService.clearReports called but localStorage is disabled. Use DELETE /api/reports instead.')
   },
 }

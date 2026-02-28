@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { Upload, Trash2, Search, Calendar, Users, BarChart3, TrendingUp, AlertTriangle, Filter, MapPin, Briefcase, X } from 'lucide-react'
-import { projectStorageService } from '@/lib/projectStorage'
 import ProjectUpload from '@/components/ProjectUpload'
 import LastUpdated from '@/components/LastUpdated'
 import LoadingSkeleton from '@/components/LoadingSkeleton'
@@ -23,25 +22,49 @@ export default function MPProjectsPage() {
     loadProjects()
   }, [])
 
-  const loadProjects = () => {
+  const loadProjects = async () => {
     setLoading(true)
-    setTimeout(() => {
-      const data = projectStorageService.getProjects()
-      const metadata = projectStorageService.getMetadata()
-      setProjects(data)
-      setLastUpdated(metadata?.lastUpdated || null)
+    try {
+      // Fetch projects from database
+      const response = await fetch('/api/projects')
+      const result = await response.json()
+      
+      if (result.success && result.data) {
+        setProjects(result.data)
+        setLastUpdated(result.metadata?.lastUpdated || null)
+        console.log('📊 Loaded', result.data.length, 'projects from database')
+      } else {
+        setProjects([])
+        setLastUpdated(null)
+      }
+    } catch (error) {
+      console.error('Failed to load projects:', error)
+      setProjects([])
+      setLastUpdated(null)
+    } finally {
       setLoading(false)
-    }, 200)
+    }
   }
 
   const handleUploadSuccess = () => {
     loadProjects()
   }
 
-  const handleClearData = () => {
-    if (confirm('Are you sure you want to clear all project data?')) {
-      projectStorageService.clearProjects()
-      loadProjects()
+  const handleClearData = async () => {
+    if (confirm('Are you sure you want to clear all project data from the database?')) {
+      try {
+        const response = await fetch('/api/projects', { method: 'DELETE' })
+        const result = await response.json()
+        if (result.success) {
+          console.log('✅ Cleared projects:', result.message)
+          loadProjects()
+        } else {
+          alert('Failed to clear projects')
+        }
+      } catch (error) {
+        console.error('Failed to clear projects:', error)
+        alert('Failed to clear projects. Please try again.')
+      }
     }
   }
 

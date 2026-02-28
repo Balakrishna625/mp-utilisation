@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
+import { calculatePeriodInfo, formatDateISO } from '@/lib/dateUtils'
+import { prisma } from '@/lib/prisma'
 
 // Helper function to normalize column names
 const normalizeColumnName = (name: string): string => {
@@ -65,6 +67,11 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
     const file = formData.get('file') as File
+    
+    // Get period configuration
+    const periodType = formData.get('periodType') as string || 'monthly'
+    const fromDateStr = formData.get('fromDate') as string
+    const toDateStr = formData.get('toDate') as string
 
     if (!file) {
       return NextResponse.json(
@@ -72,6 +79,27 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    // Validate period configuration
+    if (!fromDateStr || !toDateStr) {
+      return NextResponse.json(
+        { error: 'Please provide both From Date and To Date' },
+        { status: 400 }
+      )
+    }
+
+    const fromDate = new Date(fromDateStr)
+    const toDate = new Date(toDateStr)
+
+    if (fromDate > toDate) {
+      return NextResponse.json(
+        { error: 'From Date must be before or equal to To Date' },
+        { status: 400 }
+      )
+    }
+
+    // Calculate period information (FY, Quarter, Month)
+    const periodInfo = calculatePeriodInfo(fromDate, toDate)
 
     // Validate file type
     const validExtensions = ['.csv', '.xls', '.xlsx']
@@ -122,8 +150,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-
-    console.log('Raw data sample:', rawData[0])
 
     // Transform data to match our schema
     const transformedData = rawData
@@ -182,7 +208,77 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('Transformed data count:', transformedData.length)
-    console.log('Sample transformed data:', transformedData[0])
+
+    // Save to database
+    try {
+      // Delete existing records for the same period and users
+      const userEmails = transformedData
+        .map((record: any) => record.email)
+        .filter((email: string) => email)
+
+      await prisma.monthlyUtilization.deleteMany({
+        where: {
+          userEmail: { in: userEmails },
+          financialYear: periodInfo.financialYear,
+          quarter: periodInfo.quarter,
+          periodType,
+          fromDate: periodInfo.fromDate,
+          toDate: periodInfo.toDate,
+        }
+      })
+
+      // Prepare records for database insertion
+      const dbRecords = transformedData.map((record: any) => ({
+        userEmail: record.email || `${record.name.toLowerCase().replace(/\s+/g, '.')}@example.com`,
+        name: record.name,
+        title: record.title,
+        month: periodInfo.month,
+        monthNumber: periodInfo.monthNumber,
+        quarter: periodInfo.quarter,
+        financialYear: periodInfo.financialYear,
+        date: periodInfo.firstDayOfMonth,
+        periodType,
+        fromDate: periodInfo.fromDate,
+        toDate: periodInfo.toDate,
+        targetHours: record.targetHours,
+        project: record.project,
+        pmn: record.pmn,
+        utilization: record.utilization,
+        fringeImpact: record.fringeImpact,
+        fringe: record.fringe,
+        wPresales: record.wPresales,
+        mentor: record.mentor,
+      }))
+
+      // Batch insert records
+      await prisma.monthlyUtilization.createMany({
+        data: dbRecords,
+        skipDuplicates: true,
+      })
+
+      // Create upload metadata
+      await prisma.uploadMetadata.create({
+        data: {
+          fileName: file.name,
+          dataType: 'utilization',
+          recordCount: transformedData.length,
+          uploadedBy: 'system',
+          dateRange: {
+            periodType,
+            fromDate: formatDateISO(periodInfo.fromDate),
+            toDate: formatDateISO(periodInfo.toDate),
+            financialYear: periodInfo.financialYear,
+            quarter: periodInfo.quarter,
+            month: periodInfo.month,
+          }
+        }
+      })
+
+      console.log(`✅ Saved ${transformedData.length} records to database`)
+    } catch (dbError: any) {
+      console.error('Database save error:', dbError)
+      // Continue even if DB save fails - return data so UI can cache it
+    }
 
     return NextResponse.json({
       success: true,
@@ -191,6 +287,15 @@ export async function POST(request: NextRequest) {
       recordCount: transformedData.length,
       fileType: file.name.toLowerCase().endsWith('.csv') ? 'CSV' : 'Excel',
       fileName: file.name,
+      periodInfo: {
+        periodType,
+        fromDate: formatDateISO(periodInfo.fromDate),
+        toDate: formatDateISO(periodInfo.toDate),
+        financialYear: periodInfo.financialYear,
+        quarter: periodInfo.quarter,
+        month: periodInfo.month,
+        monthNumber: periodInfo.monthNumber,
+      }
     })
   } catch (error: any) {
     console.error('Upload error:', error)

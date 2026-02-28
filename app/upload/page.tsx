@@ -1,10 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, BarChart3, Briefcase, Users } from 'lucide-react'
-import { storageService } from '@/lib/storage'
-import { projectStorageService } from '@/lib/projectStorage'
-import { reportStorageService } from '@/lib/reportStorage'
+import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, BarChart3, Briefcase, Users, Calendar } from 'lucide-react'
 
 interface UploadState {
   file: File | null
@@ -14,12 +11,24 @@ interface UploadState {
   recordCount?: number
 }
 
+interface PeriodConfig {
+  periodType: 'monthly' | 'weekly'
+  fromDate: string
+  toDate: string
+}
+
 export default function UploadPage() {
   const [utilization, setUtilization] = useState<UploadState>({
     file: null,
     uploading: false,
     success: false,
     error: null,
+  })
+
+  const [periodConfig, setPeriodConfig] = useState<PeriodConfig>({
+    periodType: 'monthly',
+    fromDate: '',
+    toDate: '',
   })
 
   const [projects, setProjects] = useState<UploadState>({
@@ -50,11 +59,34 @@ export default function UploadPage() {
       return
     }
 
+    // Validate period configuration for utilization uploads
+    if (type === 'utilization') {
+      if (!periodConfig.fromDate || !periodConfig.toDate) {
+        setState({ ...state, error: 'Please select both From Date and To Date' })
+        return
+      }
+      
+      const fromDate = new Date(periodConfig.fromDate)
+      const toDate = new Date(periodConfig.toDate)
+      
+      if (fromDate > toDate) {
+        setState({ ...state, error: 'From Date must be before or equal to To Date' })
+        return
+      }
+    }
+
     setState({ ...state, uploading: true, error: null })
 
     try {
       const formData = new FormData()
       formData.append('file', state.file)
+
+      // Add period configuration for utilization uploads
+      if (type === 'utilization') {
+        formData.append('periodType', periodConfig.periodType)
+        formData.append('fromDate', periodConfig.fromDate)
+        formData.append('toDate', periodConfig.toDate)
+      }
 
       const endpoint = type === 'utilization' 
         ? '/api/upload' 
@@ -75,36 +107,15 @@ export default function UploadPage() {
 
       console.log(`✅ Upload successful for ${type}:`, result)
 
-      // Save to localStorage
+      // Data is now saved to database via API - no localStorage usage
       if (type === 'utilization') {
-        storageService.saveData(result.data, {
-          fileName: result.fileName,
-          fileType: result.fileType,
-        })
-        console.log('💾 Saved utilization data:', result.data.length, 'records')
+        console.log('💾 Saved utilization data to database:', result.data?.length || result.recordCount, 'records')
       } else if (type === 'projects') {
-        projectStorageService.saveProjects(result.data)
-        console.log('💾 Saved projects data:', result.data.length, 'records')
+        console.log('💾 Saved projects data to database:', result.data?.length || result.recordCount, 'records')
       } else {
-        // Reports file contains both employee reports AND mentor-mentee data
-        reportStorageService.saveReports(result.data, result.fileName)
-        console.log('💾 Saved reports data:', result.data.length, 'records')
-        
-        // Also save mentor-mentee relationships if present
+        console.log('💾 Saved reports data to database:', result.data?.length || result.recordCount, 'records')
         if (result.mentorMenteeData && result.mentorMenteeData.length > 0) {
-          console.log('💾 Saving mentor-mentee data:', result.mentorMenteeData.length, 'relationships')
-          console.log('Sample mentor-mentee record:', result.mentorMenteeData[0])
-          storageService.saveData(result.mentorMenteeData, {
-            fileName: result.fileName,
-            fileType: 'employee-reports',
-          })
-          
-          // Verify it was saved
-          const saved = storageService.getData()
-          console.log('✅ Verification: localStorage now has', saved.length, 'records for mentor-mentee')
-          console.log('Sample saved record:', saved[0])
-        } else {
-          console.log('⚠️ No mentor-mentee data in response. Result keys:', Object.keys(result))
+          console.log('💾 Saved mentor-mentee data to database:', result.mentorMenteeData.length, 'relationships')
         }
       }
 
@@ -168,6 +179,87 @@ export default function UploadPage() {
             <p className="text-text-muted text-sm">{description}</p>
           </div>
         </div>
+
+        {/* Period Type Selection - Only for Utilization */}
+        {type === 'utilization' && (
+          <div className="mb-4">
+            <label className="block text-text-primary text-sm font-medium mb-2">
+              Period Type
+            </label>
+            <div className="flex gap-3">
+              <label className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg border-2 cursor-pointer transition-all ${
+                periodConfig.periodType === 'monthly' 
+                  ? 'bg-primary/10 border-primary text-primary' 
+                  : 'bg-surface border-surface-light text-text-secondary hover:border-primary/30'
+              } ${state.uploading ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                <input
+                  type="radio"
+                  name="periodType"
+                  value="monthly"
+                  checked={periodConfig.periodType === 'monthly'}
+                  onChange={(e) => setPeriodConfig({ ...periodConfig, periodType: 'monthly' })}
+                  className="w-4 h-4 text-primary focus:ring-primary"
+                  disabled={state.uploading}
+                />
+                <span className={`text-sm font-semibold ${periodConfig.periodType === 'monthly' ? 'text-primary' : 'text-text-secondary'}`}>
+                  Monthly
+                </span>
+              </label>
+              <label className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg border-2 cursor-pointer transition-all ${
+                periodConfig.periodType === 'weekly' 
+                  ? 'bg-primary/10 border-primary text-primary' 
+                  : 'bg-surface border-surface-light text-text-secondary hover:border-primary/30'
+              } ${state.uploading ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                <input
+                  type="radio"
+                  name="periodType"
+                  value="weekly"
+                  checked={periodConfig.periodType === 'weekly'}
+                  onChange={(e) => setPeriodConfig({ ...periodConfig, periodType: 'weekly' })}
+                  className="w-4 h-4 text-primary focus:ring-primary"
+                  disabled={state.uploading}
+                />
+                <span className={`text-sm font-semibold ${periodConfig.periodType === 'weekly' ? 'text-primary' : 'text-text-secondary'}`}>
+                  Weekly
+                </span>
+              </label>
+            </div>
+          </div>
+        )}
+
+        {/* Date Range Selection - Only for Utilization */}
+        {type === 'utilization' && (
+          <div className="mb-4 grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-text-primary text-sm font-medium mb-2">
+                <Calendar className="w-3 h-3 inline mr-1" />
+                From Date
+              </label>
+              <input
+                type="date"
+                value={periodConfig.fromDate}
+                onChange={(e) => setPeriodConfig({ ...periodConfig, fromDate: e.target.value })}
+                className="w-full px-3 py-2 bg-surface-light border border-surface-light rounded-lg text-text-primary font-medium text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                disabled={state.uploading}
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-text-primary text-sm font-medium mb-2">
+                <Calendar className="w-3 h-3 inline mr-1" />
+                To Date
+              </label>
+              <input
+                type="date"
+                value={periodConfig.toDate}
+                onChange={(e) => setPeriodConfig({ ...periodConfig, toDate: e.target.value })}
+                className="w-full px-3 py-2 bg-surface-light border border-surface-light rounded-lg text-text-primary font-medium text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                disabled={state.uploading}
+                required
+              />
+            </div>
+          </div>
+        )}
 
         {/* File Input */}
         <div className="flex-1 mb-4">

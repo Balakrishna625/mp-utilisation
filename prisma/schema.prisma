@@ -1,0 +1,232 @@
+// Prisma Schema for MP Utilization App
+// Compatible with both Supabase PostgreSQL and AWS RDS PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ===========================
+// USER & AUTHENTICATION
+// ===========================
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  name          String
+  role          String   @default("employee")
+  title         String?
+  managerName   String?
+  practice      String?
+  isContractor  Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  monthlyRecords      MonthlyUtilization[]
+  badgeHistory        BadgeHistory[]
+  reports             EmployeeAvailability[]
+  projectAssignments  ProjectResource[]
+  
+  @@map("users")
+}
+
+// ===========================
+// MONTHLY UTILIZATION DATA
+// ===========================
+
+model MonthlyUtilization {
+  id              String   @id @default(uuid())
+  
+  // User reference
+  userId          String?
+  userEmail       String
+  name            String
+  title           String
+  
+  // Time period
+  periodType      String   @default("monthly") // "monthly" or "weekly"
+  fromDate        DateTime // Start date of the period
+  toDate          DateTime // End date of the period
+  month           String   // "Jul", "Aug", "Sep"
+  monthNumber     Int      // 1-12
+  quarter         String   // "FQ1", "FQ2", "FQ3", "FQ4"
+  financialYear   String   // "FY25", "FY26"
+  date            DateTime // First day of the month (for backward compatibility)
+  
+  // Utilization metrics
+  targetHours     Float
+  project         Float
+  pmn             Float
+  utilization     Float
+  fringeImpact    Float
+  fringe          Float
+  wPresales       Float
+  
+  // Additional info
+  mentor          String?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relations
+  user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  @@index([userEmail])
+  @@index([financialYear, quarter])
+  @@index([date])
+  @@index([periodType])
+  @@index([fromDate, toDate])
+  @@map("monthly_utilization")
+}
+
+// ===========================
+// ACHIEVEMENT BADGES
+// ===========================
+
+model BadgeHistory {
+  id                String   @id @default(uuid())
+  
+  // User reference
+  userId            String?
+  userEmail         String
+  
+  // Badge details
+  badgeId           String   // "elite-performer", "consistent-contributor", etc.
+  earnedDate        DateTime
+  period            String   // "month", "quarter", "year"
+  
+  // Achievement data (JSON stored)
+  utilization       Float?
+  projectHours      Float?
+  menteeCount       Int?
+  improvement       Float?
+  otherData         Json?    // For any additional badge-specific data
+  
+  createdAt         DateTime @default(now())
+  
+  // Relations
+  user              User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  @@index([userEmail])
+  @@index([badgeId])
+  @@index([earnedDate])
+  @@map("badge_history")
+}
+
+// ===========================
+// MP PROJECTS
+// ===========================
+
+model MPProject {
+  id                String   @id @default(uuid())
+  
+  projectName       String
+  status            String
+  projectType       String
+  region            String
+  deliveryPOC       String
+  deliveryOwner     String
+  fmRCNames         String
+  remarks           String   @db.Text
+  accountManager    String
+  
+  duration          Int
+  startDate         DateTime
+  endDate           DateTime
+  
+  techstack         String   @db.Text
+  salesFolder       String?
+  practice          String
+  projectTerritory  String
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relations
+  resources         ProjectResource[]
+  
+  @@index([status])
+  @@index([practice])
+  @@index([region])
+  @@index([startDate, endDate])
+  @@map("mp_projects")
+}
+
+model ProjectResource {
+  id          String   @id @default(uuid())
+  
+  projectId   String
+  userId      String
+  resourceName String
+  
+  createdAt   DateTime @default(now())
+  
+  // Relations
+  project     MPProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([projectId, userId])
+  @@index([projectId])
+  @@index([userId])
+  @@map("project_resources")
+}
+
+// ===========================
+// EMPLOYEE AVAILABILITY REPORTS
+// ===========================
+
+model EmployeeAvailability {
+  id                        String   @id @default(uuid())
+  
+  // User reference
+  userId                    String?
+  userEmail                 String
+  name                      String
+  
+  role                      String
+  currentProject            String
+  isAvailable               String   // "Available", "No", "Has Bandwidth", "Booked"
+  tentativeProject          String?
+  availableFrom             DateTime?
+  practice                  String
+  mentor                    String?
+  managerName               String
+  isContractor              Boolean  @default(false)
+  remarks                   String?  @db.Text
+  currentProjectUtilization Float?
+  
+  lastUpdated               DateTime @default(now())
+  createdAt                 DateTime @default(now())
+  
+  // Relations
+  user                      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  @@index([userEmail])
+  @@index([isAvailable])
+  @@index([practice])
+  @@map("employee_availability")
+}
+
+// ===========================
+// METADATA & UPLOADS
+// ===========================
+
+model UploadMetadata {
+  id            String   @id @default(uuid())
+  
+  dataType      String   // "utilization", "projects", "reports"
+  fileName      String
+  recordCount   Int
+  uploadedBy    String?
+  uploadedAt    DateTime @default(now())
+  
+  dateRange     Json?    // { from: "2025-01-01", to: "2025-12-31" }
+  
+  @@index([dataType])
+  @@index([uploadedAt])
+  @@map("upload_metadata")
+}

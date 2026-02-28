@@ -1,88 +1,33 @@
-import type { EmployeeUtilization } from '@/types/utilization'
+import type { EmployeeUtilization, HistoricalUtilization, EmployeeHistoricalData } from '@/types/utilization'
 
-const STORAGE_KEY = 'mp-utilization-data'
-const STORAGE_METADATA_KEY = 'mp-utilization-metadata'
-
-interface StorageMetadata {
-  lastUpdated: string
-  fileName: string
-  recordCount: number
-  fileType: string
-}
+// NOTE: This service no longer uses localStorage - all data should come from database
+// Keeping this for backward compatibility and utility functions
 
 export const storageService = {
-  // Save utilization data to localStorage
-  saveData: (data: EmployeeUtilization[], metadata?: Partial<StorageMetadata>) => {
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
-        
-        if (metadata) {
-          const meta: StorageMetadata = {
-            lastUpdated: new Date().toISOString(),
-            fileName: metadata.fileName || 'unknown',
-            recordCount: data.length,
-            fileType: metadata.fileType || 'unknown',
-          }
-          localStorage.setItem(STORAGE_METADATA_KEY, JSON.stringify(meta))
-        }
-        
-        console.log('✅ Saved', data.length, 'records to localStorage')
-        
-        // Dispatch custom event to notify all listening components
-        window.dispatchEvent(new CustomEvent('utilizationDataUpdated', { 
-          detail: { count: data.length } 
-        }))
-        
-        return true
-      } catch (error) {
-        console.error('Failed to save data:', error)
-        return false
-      }
-    }
+  // No longer saves to localStorage - data should be saved via API
+  saveData: (data: EmployeeUtilization[], metadata?: any) => {
+    console.log('⚠️ storageService.saveData called but localStorage is disabled. Use API endpoints instead.')
     return false
   },
 
-  // Get utilization data from localStorage
+  // No longer reads from localStorage - data should come from API
   getData: (): EmployeeUtilization[] => {
-    if (typeof window !== 'undefined') {
-      try {
-        const data = localStorage.getItem(STORAGE_KEY)
-        if (data) {
-          const parsed = JSON.parse(data)
-          console.log('📊 Loaded', parsed.length, 'records from localStorage')
-          return parsed
-        }
-      } catch (error) {
-        console.error('Failed to load data:', error)
-      }
-    }
+    console.log('⚠️ storageService.getData called but localStorage is disabled. Use /api/data instead.')
     return []
   },
 
-  // Get metadata about stored data
-  getMetadata: (): StorageMetadata | null => {
-    if (typeof window !== 'undefined') {
-      try {
-        const meta = localStorage.getItem(STORAGE_METADATA_KEY)
-        return meta ? JSON.parse(meta) : null
-      } catch (error) {
-        console.error('Failed to load metadata:', error)
-      }
-    }
+  // No longer reads from localStorage
+  getMetadata: (): null => {
+    console.log('⚠️ storageService.getMetadata called but localStorage is disabled.')
     return null
   },
 
-  // Clear all data
+  // No longer clears localStorage
   clearData: () => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(STORAGE_KEY)
-      localStorage.removeItem(STORAGE_METADATA_KEY)
-      console.log('🗑️ Cleared all data from localStorage')
-    }
+    console.log('⚠️ storageService.clearData called but localStorage is disabled. Use DELETE /api/data instead.')
   },
 
-  // Calculate summary statistics
+  // Calculate summary statistics (utility function still works)
   getSummary: (data: EmployeeUtilization[]) => {
     if (data.length === 0) {
       return {
@@ -108,7 +53,7 @@ export const storageService = {
     }
   },
 
-  // Validate data integrity
+  // Validate data integrity (utility function still works)
   validateData: (data: any[]): boolean => {
     if (!Array.isArray(data) || data.length === 0) return false
     
@@ -117,5 +62,20 @@ export const storageService = {
     const firstItem = data[0]
     
     return requiredFields.every(field => field in firstItem)
-  }
+  },
+
+  // Historical data functions disabled
+  saveHistoricalData: (employeeName: string, data: EmployeeHistoricalData) => {
+    console.log('⚠️ storageService.saveHistoricalData called but localStorage is disabled.')
+    return false
+  },
+
+  getHistoricalData: (employeeName: string): EmployeeHistoricalData | null => {
+    return null
+  },
+
+  getAllHistoricalData: (): Record<string, EmployeeHistoricalData> => {
+    return {}
+  },
 }
+

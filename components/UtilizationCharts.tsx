@@ -52,7 +52,7 @@ export default function UtilizationCharts({ viewType, data, onRangeSelect, selec
       ...role,
       color: colors[index % colors.length],
       isOther: false,
-      breakdown: null
+      breakdown: null as { name: string; value: number; percentage: number; }[] | null
     }))
     
     // Add "Other" category if there are small roles
@@ -63,7 +63,7 @@ export default function UtilizationCharts({ viewType, data, onRangeSelect, selec
         percentage: otherRoles.reduce((sum, role) => sum + role.percentage, 0),
         color: '#6b7280', // gray
         isOther: true,
-        breakdown: otherRoles
+        breakdown: otherRoles as { name: string; value: number; percentage: number; }[] | null
       })
     }
     
