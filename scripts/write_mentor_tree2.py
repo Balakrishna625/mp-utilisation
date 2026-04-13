@@ -1,11 +1,20 @@
-"use client"
+#!/usr/bin/env python3
+"""Writes the full mentor-mentee page with 3 view modes:
+  • Org Chart (default) – real top-down org chart with connector lines
+  • Outline             – indented tree (previous tree view)
+  • List                – flat mentor→mentees list
+All data logic is preserved.
+"""
+import os
+
+PAGE = r'''"use client"
 import ConfirmDialog from '@/components/ConfirmDialog'
 import { useState, useEffect, useMemo } from 'react'
 import {
   Search, Users, Upload, Trash2, UserCheck, UserX, Network,
   Mail, Briefcase, ChevronDown, ChevronRight, Activity,
   CheckCircle, AlertCircle, X as XIcon, GitBranch, List,
-  ListTree,
+  LayoutTree,
 } from 'lucide-react'
 import LastUpdated from '@/components/LastUpdated'
 import LoadingSkeleton from '@/components/LoadingSkeleton'
@@ -135,6 +144,7 @@ function OrgCard({
   const isBoth = hasChildren && !!node.employee.mentor
   const isRoot = node.depth === 0
 
+  /* size by depth */
   const avatarSize = isRoot ? 44 : node.depth === 1 ? 36 : 30
   const nameCls = isRoot ? 'text-sm font-extrabold' : node.depth === 1 ? 'text-xs font-bold' : 'text-[11px] font-semibold'
   const cardW = isRoot ? 220 : node.depth === 1 ? 190 : 168
@@ -157,6 +167,7 @@ function OrgCard({
     >
       {/* card body */}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+        {/* avatar */}
         <div
           className={`flex-shrink-0 bg-gradient-to-br ${d.avatar} flex items-center justify-center shadow ring-1 ${d.ring}`}
           style={{ width: avatarSize, height: avatarSize, borderRadius: isRoot ? 12 : 8, fontSize: isRoot ? 14 : 11, fontWeight: 800, color: '#fff', letterSpacing: '.5px' }}
@@ -164,6 +175,7 @@ function OrgCard({
           {getInitials(node.employee.name)}
         </div>
 
+        {/* text */}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className={`text-text-primary ${nameCls} leading-tight truncate`}>
             {node.employee.name}
@@ -267,11 +279,13 @@ function OrgChartNode({
               const isFirst = i === 0
               const isLast = i === node.children.length - 1
               const childStem = dp(child.depth).stem
+
               return (
                 <div
                   key={child.employee.id + '-' + child.depth + '-' + i}
                   style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative', padding: '0 10px' }}
                 >
+                  {/* Horizontal connector segment at top of this column */}
                   {!isSingle && (
                     <div
                       style={{
@@ -285,7 +299,9 @@ function OrgChartNode({
                       }}
                     />
                   )}
+                  {/* Vertical connector down to child card */}
                   <div style={{ width: 2, height: 24, background: childStem, opacity: 0.4 }} />
+                  {/* Recursive child */}
                   <OrgChartNode
                     node={child}
                     searchTerm={searchTerm}
@@ -707,7 +723,7 @@ export default function MentorMenteePage() {
         {filter !== 'without-mentors' && (
           <div className="flex items-center gap-1 bg-surface border border-surface-light rounded-lg p-1">
             {([
-              { mode: 'org'    as ViewMode, Icon: ListTree,   label: 'Org Chart' },
+              { mode: 'org'    as ViewMode, Icon: LayoutTree, label: 'Org Chart' },
               { mode: 'outline'as ViewMode, Icon: GitBranch,  label: 'Outline'   },
               { mode: 'list'   as ViewMode, Icon: List,       label: 'List'      },
             ]).map(({ mode, Icon, label }) => (
@@ -745,7 +761,7 @@ export default function MentorMenteePage() {
           <>
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-bold text-text-primary flex items-center gap-2">
-                <ListTree className="w-5 h-5 text-primary" />
+                <LayoutTree className="w-5 h-5 text-primary" />
                 Organisation Chart
                 <span className="ml-1 text-text-muted font-normal text-base">
                   — {filteredTreeRoots.length} root mentor{filteredTreeRoots.length !== 1 ? 's' : ''}
@@ -764,48 +780,23 @@ export default function MentorMenteePage() {
 
             {filteredTreeRoots.length === 0 ? (
               <div className="text-center py-16 bg-surface rounded-xl border border-surface-light">
-                <ListTree className="w-16 h-16 text-text-muted mx-auto mb-3" />
+                <LayoutTree className="w-16 h-16 text-text-muted mx-auto mb-3" />
                 <h3 className="text-lg font-bold text-text-primary mb-1">No Hierarchy Found</h3>
                 <p className="text-text-secondary">{searchTerm ? 'Try adjusting your search' : 'No mentor-mentee hierarchy detected'}</p>
               </div>
             ) : (
-              /* vertical stack — each root tree stretches to full panel width */
-              <div className="w-full pb-4 space-y-8">
-                {filteredTreeRoots.map((root, i) => (
-                  <div
-                    key={root.employee.id + '-org-' + i}
-                    className="w-full rounded-2xl"
-                    style={{
-                      padding: '24px 32px 28px',
-                      background: 'rgba(255,255,255,0.03)',
-                      border: `1px solid ${PALETTE[0].stem}22`,
-                      borderLeft: `4px solid ${PALETTE[0].stem}88`,
-                    }}
-                  >
-                    {/* root header strip */}
-                    <div className="flex items-center gap-2 mb-5 text-xs font-bold uppercase tracking-widest" style={{ color: PALETTE[0].stem, opacity: 0.75 }}>
-                      <span>Root</span>
-                      <span style={{ opacity: 0.35 }}>·</span>
-                      <span>{root.employee.name}</span>
-                      {root.descendantCount > 0 && (
-                        <span className="ml-auto font-normal normal-case tracking-normal text-text-muted">
-                          {root.descendantCount} people in chain
-                        </span>
-                      )}
-                    </div>
-
-                    {/* tree — horizontally scrollable inside each root card */}
-                    <div className="overflow-x-auto pb-2">
-                      <div style={{ display: 'inline-block' }}>
-                        <OrgChartNode
-                          node={root}
-                          searchTerm={searchTerm}
-                          defaultExpand={root.depth < 2}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
+              /* horizontal scroll wrapper for wide trees */
+              <div className="overflow-x-auto pb-4">
+                <div style={{ display: 'inline-flex', gap: 48, alignItems: 'flex-start', minWidth: 'max-content', paddingBottom: 16 }}>
+                  {filteredTreeRoots.map((root, i) => (
+                    <OrgChartNode
+                      key={root.employee.id + '-org-' + i}
+                      node={root}
+                      searchTerm={searchTerm}
+                      defaultExpand={root.depth < 2}
+                    />
+                  ))}
+                </div>
               </div>
             )}
 
@@ -891,3 +882,13 @@ export default function MentorMenteePage() {
     </div>
   )
 }
+'''
+
+dest = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), '..', 'app', 'mentor-mentee', 'page.tsx')
+)
+
+with open(dest, 'w', encoding='utf-8') as f:
+    f.write(PAGE)
+
+print(f"Written {len(PAGE)} chars to {dest}")

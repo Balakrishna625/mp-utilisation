@@ -337,14 +337,15 @@ export default function EnhancedIndividualDashboard() {
       })
       
       if (monthRecords.length > 0) {
-        // Aggregate all weekly records for this month (sum hours, average utilization)
+        // Aggregate all weekly records for this month (sum hours)
+        // and compute weighted utilization (project / target) when possible.
         const aggregated = monthRecords.reduce((acc, record) => ({
           project: acc.project + (record.project || 0),
           pmn: acc.pmn + (record.pmn || 0),
           fringe: acc.fringe + (record.fringe || 0),
           wPresales: acc.wPresales + (record.wPresales || 0),
           fringeImpact: acc.fringeImpact + (record.fringeImpact || 0),
-          utilization: acc.utilization + (record.utilization || 0),
+          utilSum: acc.utilSum + (record.utilization || 0),
           targetHours: acc.targetHours + (record.targetHours || 0),
           count: acc.count + 1
         }), { 
@@ -353,19 +354,23 @@ export default function EnhancedIndividualDashboard() {
           fringe: 0, 
           wPresales: 0, 
           fringeImpact: 0, 
-          utilization: 0,
+          utilSum: 0,
           targetHours: 0,
           count: 0
         })
         
         const firstRecord = monthRecords[0]
+        const util = aggregated.targetHours > 0
+          ? (aggregated.project / aggregated.targetHours) * 100
+          : (aggregated.utilSum / Math.max(aggregated.count, 1))
+
         myData = {
           id: user.employeeName,
           name: user.employeeName,
           email: firstRecord.email || myData?.email || '',
           title: firstRecord.title || myData?.title || '',
           targetHours: aggregated.targetHours,
-          utilization: aggregated.utilization / aggregated.count, // Average utilization
+          utilization: util,
           project: aggregated.project,
           pmn: aggregated.pmn,
           fringeImpact: aggregated.fringeImpact,
@@ -406,19 +411,23 @@ export default function EnhancedIndividualDashboard() {
       monthlyGroups.get(key)!.push(record)
     })
     
-    // Aggregate each group
+    // Aggregate each group into a HistoricalUtilization entry
     return Array.from(monthlyGroups.entries()).map(([period, records]) => {
       const aggregated = records.reduce((acc, record) => ({
         targetHours: acc.targetHours + (record.targetHours || 0),
         projectHours: acc.projectHours + (record.project || 0),
         fringe: acc.fringe + (record.fringe || 0),
-        utilization: acc.utilization + (record.utilization || 0),
+        utilSum: acc.utilSum + (record.utilization || 0),
         count: acc.count + 1
-      }), { targetHours: 0, projectHours: 0, fringe: 0, utilization: 0, count: 0 })
-      
+      }), { targetHours: 0, projectHours: 0, fringe: 0, utilSum: 0, count: 0 })
+
+      const utilization = aggregated.targetHours > 0
+        ? (aggregated.projectHours / aggregated.targetHours) * 100
+        : (aggregated.utilSum / Math.max(aggregated.count, 1))
+
       return {
         period,
-        utilization: aggregated.utilization / aggregated.count, // Average utilization
+        utilization,
         targetHours: aggregated.targetHours,
         projectHours: aggregated.projectHours,
         fringe: aggregated.fringe,

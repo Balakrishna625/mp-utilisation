@@ -60,13 +60,15 @@ function aggregateRecords(records: any[]) {
       fringe: acc.fringe + (r.fringe || 0),
       wPresales: acc.wPresales + (r.wPresales || 0),
       fringeImpact: acc.fringeImpact + (r.fringeImpact || 0),
-      utilization: acc.utilization + (r.utilization || 0),
+      utilSum: acc.utilSum + (r.utilization || 0),
       targetHours: acc.targetHours + (r.targetHours || 0),
       count: acc.count + 1,
     }),
     { project: 0, pmn: 0, fringe: 0, wPresales: 0, fringeImpact: 0, utilization: 0, targetHours: 0, count: 0 }
   )
-  return { ...t, utilization: t.count > 0 ? t.utilization / t.count : 0 }
+  // Compute weighted utilization if target hours are available, otherwise average the percent values
+  const utilization = t.targetHours > 0 ? (t.project / t.targetHours) * 100 : (t.utilSum / Math.max(t.count, 1))
+  return { ...t, utilization }
 }
 
 const QUARTER_MONTHS: Record<string, string[]> = {

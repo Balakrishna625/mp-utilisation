@@ -17,22 +17,24 @@ export default function UtilizationTrendChart({
   color = '#00CED1',
   selectedFY
 }: UtilizationTrendChartProps) {
-  // Extract year from selectedFY (e.g., "FY25" -> 2025)
+  // Note: fiscal years span Jul->Jun. When `selectedFY` is provided we filter
+  // by the `period` string (which is formatted like "Jul FY25") rather than by calendar year.
   const selectedYear = useMemo(() => {
-    if (!selectedFY) return new Date().getFullYear()
-    const fyNum = parseInt(selectedFY.replace('FY', ''))
-    return 2000 + fyNum
+    if (!selectedFY) return null
+    return selectedFY
   }, [selectedFY])
 
   // Group data by quarters for the selected year
   const quarterlyData = useMemo(() => {
     if (!data || data.length === 0) return null
 
-    // Filter data for selected year and group by quarter
-    const yearData = data.filter(item => {
-      const itemYear = new Date(item.date).getFullYear()
-      return itemYear === selectedYear
-    })
+    // Filter data for selected fiscal year (preferred) or fallback to calendar year
+    const yearData = selectedYear
+      ? data.filter(item => item.period && item.period.includes(selectedYear))
+      : data.filter(item => {
+        const itemYear = new Date(item.date).getFullYear()
+        return itemYear === new Date().getFullYear()
+      })
 
     if (yearData.length === 0) return null
 

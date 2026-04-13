@@ -36,21 +36,23 @@ export async function GET(request: NextRequest) {
       // Aggregate: group by employee name, sum numeric fields, recalc utilization
       const grouped = new Map<string, typeof records>()
       for (const record of records) {
-        const key = record.name.toLowerCase().trim()
+        // Prefer stable identifiers when grouping: userEmail -> userId -> name
+        const key = (record.userEmail || record.userId || record.name || '').toString().toLowerCase().trim()
         if (!grouped.has(key)) grouped.set(key, [])
         grouped.get(key)!.push(record)
       }
 
       data = Array.from(grouped.entries()).map(([, rows]) => {
         // Use the latest row for meta fields (title, mentor, ids)
-        const latest = rows[0] // already ordered date desc
-        const totalTarget  = rows.reduce((s, r) => s + r.targetHours, 0)
-        const totalProject = rows.reduce((s, r) => s + r.project, 0)
-        const totalPmn     = rows.reduce((s, r) => s + r.pmn, 0)
-        const totalPresales= rows.reduce((s, r) => s + r.wPresales, 0)
-        const totalFringe  = rows.reduce((s, r) => s + r.fringe, 0)
-        const totalFringeImpact = rows.reduce((s, r) => s + r.fringeImpact, 0)
-        const util = totalTarget > 0 ? (totalProject / totalTarget) * 100 : 0
+          const latest = rows[0] // already ordered date desc
+          const totalTarget  = rows.reduce((s, r) => s + (r.targetHours || 0), 0)
+          const totalProject = rows.reduce((s, r) => s + (r.project || 0), 0)
+          const totalPmn     = rows.reduce((s, r) => s + (r.pmn || 0), 0)
+          const totalPresales= rows.reduce((s, r) => s + (r.wPresales || 0), 0)
+          const totalFringe  = rows.reduce((s, r) => s + (r.fringe || 0), 0)
+          const totalFringeImpact = rows.reduce((s, r) => s + (r.fringeImpact || 0), 0)
+          // Weighted utilization (project / target) when target hours are available
+          const util = totalTarget > 0 ? (totalProject / totalTarget) * 100 : (rows.reduce((s, r) => s + (r.utilization || 0), 0) / Math.max(rows.length, 1))
 
         return {
           id: latest.id,
@@ -75,7 +77,7 @@ export async function GET(request: NextRequest) {
       // No date range: keep only the most recent record per employee
       const seen = new Map<string, typeof records[0]>()
       for (const record of records) {
-        const key = record.name.toLowerCase().trim()
+        const key = (record.userEmail || record.userId || record.name || '').toString().toLowerCase().trim()
         if (!seen.has(key)) seen.set(key, record) // date desc → first = latest
       }
       data = Array.from(seen.values()).sort((a, b) => b.utilization - a.utilization)

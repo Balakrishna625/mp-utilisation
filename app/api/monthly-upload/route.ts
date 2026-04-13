@@ -48,17 +48,23 @@ const columnMapping: Record<string, string> = {
 }
 
 // Helper to parse numeric values including percentages
+// Safer heuristic: only treat values as decimals when <= 1 (e.g. 0.08 -> 8%),
+// avoid multiplying small integers (e.g. 8 -> 8%) which would incorrectly become 800.
 const parseNumber = (val: any, isPercentage: boolean = false): number => {
   if (val === null || val === undefined || val === '') return 0
   if (typeof val === 'number') {
-    return isPercentage && val < 10 ? val * 100 : val
+    // If it's a decimal (<= 1) and supposed to be a percentage, multiply by 100
+    return isPercentage && Math.abs(val) <= 1 ? val * 100 : val
   }
   if (typeof val === 'string') {
     const hadPercentSign = val.includes('%')
     const cleaned = val.replace(/[%,\s]/g, '').trim()
     const parsed = parseFloat(cleaned)
     if (isNaN(parsed)) return 0
-    if (isPercentage && parsed < 10 && !hadPercentSign) {
+
+    // If it's a small decimal (<= 1) and it's supposed to be a percentage, multiply by 100
+    // Do NOT multiply when the original string contained a percent sign (e.g. '8%')
+    if (isPercentage && parsed <= 1 && !hadPercentSign) {
       return parsed * 100
     }
     return parsed
