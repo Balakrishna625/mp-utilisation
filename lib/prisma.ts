@@ -24,7 +24,12 @@ function createPrismaClient() {
   }
 
   // Create a PostgreSQL connection pool
-  const pool = new Pool({ connectionString: databaseUrl })
+  // Explicitly set rejectUnauthorized: false for RDS/cloud databases
+  // (sslmode=no-verify in the connection string is not reliably parsed by the pg library)
+  const pool = new Pool({
+    connectionString: databaseUrl,
+    ssl: { rejectUnauthorized: false },
+  })
 
   // Create the Prisma adapter
   const adapter = new PrismaPg(pool)
