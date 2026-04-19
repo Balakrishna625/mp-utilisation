@@ -3,6 +3,8 @@ import * as XLSX from 'xlsx'
 import { calculatePeriodInfo, formatDateISO } from '@/lib/dateUtils'
 import { prisma } from '@/lib/prisma'
 
+export const dynamic = 'force-dynamic'
+
 // Helper function to normalize column names
 const normalizeColumnName = (name: string): string => {
   return name.trim().toLowerCase().replace(/\s+/g, '_').replace(/[\/\\]/g, '_')

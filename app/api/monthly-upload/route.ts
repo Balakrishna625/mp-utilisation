@@ -10,6 +10,8 @@ import {
 import { calculatePeriodInfo, formatDateISO } from '@/lib/dateUtils'
 import { prisma } from '@/lib/prisma'
 
+export const dynamic = 'force-dynamic'
+
 // Helper function to normalize column names
 const normalizeColumnName = (name: string): string => {
   return name.trim().toLowerCase().replace(/\s+/g, '_').replace(/[\/\\]/g, '_')
@@ -330,8 +332,6 @@ export async function POST(request: NextRequest) {
 
     // Save to database
     try {
-      const prisma = (await import('@/lib/prisma')).default
-      
       // Test database connection first
       await prisma.$queryRaw`SELECT 1`
       

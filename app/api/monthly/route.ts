@@ -8,6 +8,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 
+export const dynamic = 'force-dynamic'
+
 // New Financial Year Quarter Mapping
 const QUARTER_MAPPING: { [month: string]: string } = {
   'Jul': 'Q1', 'Aug': 'Q1', 'Sep': 'Q1',

@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
+import prisma from '@/lib/prisma'
+
+export const dynamic = 'force-dynamic'
 
 // Helper function to normalize column names
 const normalizeColumnName = (name: string): string => {
@@ -149,8 +152,6 @@ export async function POST(request: NextRequest) {
       console.log('Transformed projects count:', transformedData.length)
 
       // Save to database
-      const prisma = (await import('@/lib/prisma')).default
-      
       // Clear existing projects
       await prisma.mPProject.deleteMany({})
 

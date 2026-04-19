@@ -1,0 +1,33 @@
+# AWS Region
+aws_region = "us-east-1"
+
+# Project Configuration
+project_name = "mp-utilisation"
+environment  = "prod"
+owner_email  = "your-email@example.com"  # Update this
+
+# VPC Configuration - COST OPTIMIZED
+vpc_cidr            = "10.0.0.0/24"      # 256 IPs - enough for small app
+availability_zones  = ["us-east-1a"]      # Single AZ saves $32/month (1 NAT instead of 2)
+
+# For High Availability (Production with high uptime needs):
+# vpc_cidr            = "10.0.0.0/16"
+# availability_zones  = ["us-east-1a", "us-east-1b"]
+
+# RDS Configuration - COST OPTIMIZED
+db_name                  = "mputilisation"
+db_username              = "mpadmin"
+db_instance_class        = "db.t4g.micro"    # ARM-based, 20% cheaper (~$12/month vs $15)
+db_allocated_storage     = 20                 # Start with 20GB
+db_max_allocated_storage = 50                 # Reduced from 100GB for cost control
+db_backup_retention_days = 7                  # 7 days is good balance
+db_multi_az              = false              # Single AZ for cost savings
+
+# For Production with HA requirements:
+# db_instance_class        = "db.t4g.small"   # Better performance
+# db_max_allocated_storage = 100
+# db_multi_az              = true              # High availability across AZs
+
+# AWS CodeCommit Configuration (No tokens needed!)
+repository_name = "mp-utilisation"  # CodeCommit repo name
+branch_name     = "main"            # Branch to deploy

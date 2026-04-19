@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
 import type { AvailabilityStatus } from '@/types/report'
+import prisma from '@/lib/prisma'
+
+export const dynamic = 'force-dynamic'
 
 const normalizeColumnName = (name: string): string => {
   return name.trim().toLowerCase().replace(/\s+/g, '_').replace(/[\/\\]/g, '_')
@@ -231,8 +234,6 @@ export async function POST(request: NextRequest) {
     }
 
     // Save to database
-    const prisma = (await import('@/lib/prisma')).default
-    
     // Clear existing reports
     await prisma.employeeAvailability.deleteMany({})
 
